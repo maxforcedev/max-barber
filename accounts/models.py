@@ -1,12 +1,7 @@
 import uuid
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
-
-
-class UserRole(models.TextChoices):
-    ADMIN = "admin", "Admin"
-    CLIENT = "client", "Client"
-    BARBER = "barber", "Barber"
+from core import UserRole
 
 
 class UserManager(BaseUserManager):
