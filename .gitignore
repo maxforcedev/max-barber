@@ -1,0 +1,37 @@
+# Arquivos e pastas do Python
+__pycache__/
+*.py[cod]
+*.sqlite3
+*.db
+*.log
+
+# Virtualenv
+env/
+venv/
+
+# Configs do sistema
+.DS_Store
+*.swp
+
+# IDEs
+.vscode/
+.idea/
+
+# Arquivos de ambiente
+.env
+.env.
+
+#Outros
+.flake8
+*.zip
+*.rar
+
+# Cache do pip
+pip-log.txt
+*.egg-info/
+dist/
+build/
+
+# Docker (se usar)
+*.pid
+*.sock
