@@ -2,9 +2,9 @@ from django.db import models
 
 
 class UserRole(models.TextChoices):
-    ADMIN = "admin", "Admin"
-    CLIENT = "client", "Client"
-    BARBER = "barber", "Barber"
+    ADMIN = "admin", "Dono(a)"
+    CLIENT = "client", "Cliente"
+    BARBER = "barber", "Barbeiro(a)"
 
 
 class AppointmentStatus(models.TextChoices):
