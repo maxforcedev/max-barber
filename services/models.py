@@ -8,3 +8,6 @@ class Service(models.Model):
     duration = models.PositiveIntegerField(help_text='Duração em minutos')
     is_active = models.BooleanField(default=True)
     price = models.DecimalField(max_digits=6, decimal_places=2)
+
+    def __str__(self):
+        return self.name
