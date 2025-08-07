@@ -11,7 +11,10 @@ ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='', cast=Csv())
 
 AUTH_USER_MODEL = 'accounts.User'
 
-REDIS_URL = config('REDIS_URL')
+REDIS_URL = config('WEB_REDIS_URL')
+
+EVOLUTION_API_URL = config('EVOLUTION_API_URL')
+
 
 INSTALLED_APPS = [
     'django.contrib.admin',

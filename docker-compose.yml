@@ -17,3 +17,31 @@ services:
     ports:
       - "6379:6379"
     restart: always
+
+  postgres:
+    container_name: postgres
+    image: postgres:15
+    environment:
+      POSTGRES_DB: evolution
+      POSTGRES_USER: evolution
+      POSTGRES_PASSWORD: evolution
+
+  evolution_redis:
+    image: redis:7
+
+  evolution-api:
+    image: atendai/evolution-api:v2.2.0
+    container_name: evolution_api
+    ports:
+      - "3600:8080"
+    depends_on:
+      - postgres
+      - evolution_redis
+    env_file:
+      - .env
+    volumes:
+      - evolution_instances:/evolution/instances
+    
+
+volumes:
+  evolution_instances:
