@@ -1,7 +1,17 @@
 import re
+import redis
 from rest_framework import serializers
-from django.contrib.auth import authenticate
+from rest_framework_simplejwt.tokens import RefreshToken
 
+from django.conf import settings
+from django.contrib.auth import authenticate
+from .models import User
+
+
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['name', 'phone']
 
 
 class LoginSerializer(serializers.Serializer):
@@ -15,7 +25,7 @@ class LoginSerializer(serializers.Serializer):
         password = attrs.get('password')
 
         if not phone:
-            raise serializers.ValidationError('O Numero de telefone é obrigatorio.')
+            raise serializers.ValidationError('O número de telefone é obrigatório.')
 
         phone = re.sub(r'\D', '', phone)
         if len(phone) != 11:
@@ -25,11 +35,34 @@ class LoginSerializer(serializers.Serializer):
             user = authenticate(request=self.context.get('request'), phone=phone, password=password)
 
             if not user:
-                raise serializers.ValidationError("As credencias fornecidas são invalidas.")
+                raise serializers.ValidationError("As credenciais fornecidas são invalidas.")
 
         elif code:
             if len(code) != 6 or not code.isdigit():
                 raise serializers.ValidationError("O código deve conter 6 dígitos numéricos.")
 
             try:
-                pass
+                r = redis.Redis.from_url(settings.REDIS_URL)
+                key = f"login_code:{phone}"
+                saved_code = r.get(key)
+
+                if saved_code is None or saved_code.decode() != code:
+                    raise serializers.ValidationError('Código informado é inválido ou está expirado.')
+
+                try:
+                    user = User.objects.get(phone=phone)
+                except User.DoesNotExist:
+                    raise serializers.ValidationError('Usuário não encontrado.')
+            except redis.RedisError:
+                raise serializers.ValidationError('Erro ao acessar o servidor de verificação.')
+        else:
+            raise serializers.ValidationError('Informe a senha ou codigo de verificação.')
+
+        refresh = RefreshToken.for_user(user)
+        return {
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+            "user": UserSerializer(user).data
+        }
+
+
