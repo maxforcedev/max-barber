@@ -95,7 +95,8 @@ class BarberAvailabilitySerializer(serializers.Serializer):
 
             now = timezone.localtime()
             if not invalid and date == now.date():
-                if datetime.combine(date, slot_start) < now + timedelta(minutes=30):
+                slot_datetime = timezone.make_aware(datetime.combine(date, slot_start))
+                if slot_datetime < now + timedelta(minutes=30):
                     invalid = True
 
             if not invalid:
