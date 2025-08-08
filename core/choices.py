@@ -8,6 +8,7 @@ class UserRole(models.TextChoices):
 
 
 class AppointmentStatus(models.TextChoices):
+    PENDING = 'pendent', 'Pendente'
     SCHEDULED = 'scheduled', 'Agendado'
     COMPLETED = 'completed', 'Concluído'
     CANCELED = 'canceled', 'Cancelado'

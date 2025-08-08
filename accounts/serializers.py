@@ -6,7 +6,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.conf import settings
 from django.contrib.auth import authenticate
 from .models import User
-from .utils import generate_code
+from core.utils import generate_code
 r = redis.Redis.from_url(settings.REDIS_URL)
 
 

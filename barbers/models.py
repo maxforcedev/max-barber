@@ -6,6 +6,9 @@ class Barber(models.Model):
     photo = models.ImageField(blank=True, null=True)
     services = models.ManyToManyField('services.Service', related_name='barbers')
 
+    def __str__(self):
+        return self.user.name
+
 
 class WorkingHour(models.Model):
     barber = models.ForeignKey('barbers.Barber', on_delete=models.CASCADE, related_name='working_hours')
