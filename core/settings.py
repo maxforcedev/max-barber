@@ -1,5 +1,6 @@
 from pathlib import Path
 from decouple import config, Csv
+from celery.schedules import crontab
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -15,6 +16,15 @@ REDIS_URL = config('WEB_REDIS_URL')
 
 EVOLUTION_API_URL = config('EVOLUTION_API_URL')
 
+
+CELERY_BROKER_URL = 'redis://127.0.0.1:6379/1'
+
+CELERY_BEAT_SCHEDULE = {
+    'clear-pending-every-5-min': {
+        'task': 'appointments.tasks.clear_pending_appointments',
+        'schedule': crontab(minute='*/5'),
+    },
+}
 
 INSTALLED_APPS = [
     'django.contrib.admin',
