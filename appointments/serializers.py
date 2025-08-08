@@ -2,7 +2,7 @@ import redis
 from datetime import datetime, timedelta
 from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
-from core.utils import clean_phone, generate_code
+from core.utils import clean_phone, generate_code, get_available_slots
 from core.choices import AppointmentStatus
 from barbers.models import WorkingHour, BlockedTime
 from accounts.models import User
@@ -53,6 +53,10 @@ class AppointmentCreateSerializer(serializers.Serializer):
             service = Service.objects.get(id=service_id)
         except Service.DoesNotExist:
             raise serializers.ValidationError('Serviço inválido.')
+
+        slots = get_available_slots(barber_id, date, service)
+        if start_time.strftime("%H:%M") not in slots:
+            raise serializers.ValidationError("Horário inválido ou indisponível.")
 
         duration = service.duration
         start_dt = datetime.combine(date, start_time)
