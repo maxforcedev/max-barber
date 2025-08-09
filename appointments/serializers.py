@@ -153,3 +153,7 @@ class AppointmentConfirmSerializer(serializers.Serializer):
             },
             "appointment_id": appointment.id if appointment else None
         }
+
+
+class AppointmentCancelSerializer(serializers.Serializer):
+    reason = serializers.CharField(required=False, allow_blank=True)

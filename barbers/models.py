@@ -3,7 +3,7 @@ from django.db import models
 
 class Barber(models.Model):
     user = models.OneToOneField('accounts.User', on_delete=models.CASCADE, related_name='barber')
-    photo = models.ImageField(blank=True, null=True)
+    photo = models.ImageField(blank=True, null=True, upload_to='barbers/')
     services = models.ManyToManyField('services.Service', related_name='barbers')
 
     def __str__(self):

@@ -36,6 +36,8 @@ build/
 *.pid
 *.sock
 
+media
+
 celerybeat-schedule-wal
 celerybeat-schedule-shm
 celerybeat-schedule

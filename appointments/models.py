@@ -1,5 +1,6 @@
 from django.db import models
-from core.choices import AppointmentStatus
+from django.utils import timezone
+from core.choices import AppointmentStatus, UserRole
 
 
 class Appointment(models.Model):
@@ -14,10 +15,21 @@ class Appointment(models.Model):
     status = models.CharField(
         max_length=20,
         choices=AppointmentStatus.choices,
-        default=AppointmentStatus.SCHEDULED
+        default=AppointmentStatus.PENDING
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
+
+    cancel_reason = models.TextField(blank=True, null=True)
+    canceled_at = models.DateTimeField(blank=True, null=True)
+    canceled_by = models.CharField(max_length=20, choices=UserRole.choices, blank=True, null=True)
+
+    def cancel(self, reason="", canceled_by="client"):
+        self.status = AppointmentStatus.CANCELED
+        self.cancel_reason = reason
+        self.canceled_at = timezone.now()
+        self.canceled_by = canceled_by
+        self.save()
 
     class Meta:
         constraints = [
