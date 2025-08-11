@@ -8,6 +8,7 @@ from .serializers import BarberSerializer, BarberAvailabilitySerializer
 class BarberViewSet(viewsets.ModelViewSet):
     queryset = Barber.objects.all()
     serializer_class = BarberSerializer
+    pagination_class = None
 
     @action(detail=True, methods=["get"], url_path="availability")
     def availability(self, request, pk=None):

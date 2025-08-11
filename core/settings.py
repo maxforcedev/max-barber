@@ -17,8 +17,12 @@ REDIS_URL = config('WEB_REDIS_URL')
 
 EVOLUTION_API_URL = config('EVOLUTION_API_URL')
 
-
 CELERY_BROKER_URL = 'redis://127.0.0.1:6379/1'
+
+REST_FRAMEWORK = {
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 10
+}
 
 CELERY_BEAT_SCHEDULE = {
     'clear-pending-every-5-min': {
