@@ -8,6 +8,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.db import models
 from core.choices import AppointmentStatus
 
+
 class AppointmentCreateView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [AllowAny]
@@ -27,7 +28,7 @@ class AppointmentConfirmView(APIView):
     def post(self, request):
         serializer = AppointmentConfirmSerializer(data=request.data)
         if serializer.is_valid():
-            data = serializer.validated_data
+            data = serializer.save()
             return Response(data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
