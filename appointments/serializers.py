@@ -239,9 +239,19 @@ class AppointmentConfirmSerializer(serializers.Serializer):
 
     def create(self, validated_data):
         phone = validated_data["phone"]
-        name = r.get(f"login_name:{phone}")
-        name = name.decode() if name else "Usuario sem nome"
-        user, _ = User.objects.get_or_create(phone=phone, defaults={"name": name, "role": UserRole.CLIENT})
+
+        name = validated_data.get("name")
+        if not name:
+            name = r.get(f"login_name:{phone}")
+            name = name.decode() if name else "Usuário"
+
+        user, created = User.objects.get_or_create(
+            phone=phone,
+            defaults={"name": name, "role": UserRole.CLIENT}
+        )
+        if not created and not user.name and name:
+            user.name = name
+            user.save()
 
         appointment = Appointment.objects.create(
             client=user,
@@ -253,7 +263,11 @@ class AppointmentConfirmSerializer(serializers.Serializer):
             status=AppointmentStatus.SCHEDULED
         )
 
+        # Limpa dados temporários
         r.delete(f"login_code:{phone}")
+        r.delete(f"login_name:{phone}")
+
+        # Gera tokens de acesso
         refresh = RefreshToken.for_user(user)
 
         return {
@@ -262,8 +276,6 @@ class AppointmentConfirmSerializer(serializers.Serializer):
             "access": str(refresh.access_token),
             "refresh": str(refresh)
         }
-
-
 
 class AppointmentCancelSerializer(serializers.Serializer):
     reason = serializers.CharField(required=False, allow_blank=True)

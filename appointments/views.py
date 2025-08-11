@@ -26,8 +26,10 @@ class AppointmentCreateView(APIView):
 
 class AppointmentConfirmView(APIView):
     def post(self, request):
+        print(request.data)
         serializer = AppointmentConfirmSerializer(data=request.data)
         if serializer.is_valid():
+            print("Erros de validação:", serializer.errors)
             data = serializer.save()
             return Response(data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

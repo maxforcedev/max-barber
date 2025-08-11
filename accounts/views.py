@@ -3,6 +3,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from .serializers import LoginSerializer, SendLoginCodeSerializer
 from .models import User
+from core.utils import clean_phone
 
 
 class LoginView(APIView):
@@ -24,6 +25,8 @@ class SendLoginCodeView(APIView):
 class CheckClientView(APIView):
     def get(self, request):
         phone = request.GET.get("phone")
+        phone = clean_phone(phone)
+
         if not phone:
             return Response({"exists": False}, status=400)
 
