@@ -35,6 +35,8 @@ class AppointmentConfirmView(APIView):
 
 
 class AppointmentCancelView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
     def post(self, request, pk):
         serializer = AppointmentCancelSerializer(data=request.data)
         if not serializer.is_valid():

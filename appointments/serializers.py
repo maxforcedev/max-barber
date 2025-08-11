@@ -8,7 +8,7 @@ from barbers.models import WorkingHour, BlockedTime
 from accounts.models import User
 from services.models import Service
 from .models import Appointment
-
+from django.db.models import Q
 from django.conf import settings
 r = redis.Redis.from_url(settings.REDIS_URL)
 
@@ -16,6 +16,7 @@ r = redis.Redis.from_url(settings.REDIS_URL)
 class AppointmentSerializer(serializers.ModelSerializer):
     barber = serializers.SerializerMethodField()
     service = serializers.SerializerMethodField()
+    canceled_by = serializers.SerializerMethodField()
 
     class Meta:
         model = Appointment
@@ -37,6 +38,14 @@ class AppointmentSerializer(serializers.ModelSerializer):
             "duration_min": obj.service.duration
         }
 
+    def get_canceled_by(self, obj):
+        mapping = {
+            "client": "Cliente",
+            "barber": "Barbeiro",
+            "admin": "Administrador"
+        }
+        return mapping.get(obj.canceled_by, obj.canceled_by or "—")
+
 
 class AppointmentCreateSerializer(serializers.Serializer):
     name = serializers.CharField(required=False, allow_blank=True)
@@ -56,14 +65,12 @@ class AppointmentCreateSerializer(serializers.Serializer):
         date = attrs.get("date")
         start_time = attrs.get("start_time")
 
-        # 1) Público precisa fornecer phone (e opcionalmente name)
         if is_public:
             if not phone:
                 raise serializers.ValidationError({"phone": "Este campo é obrigatório."})
             phone = clean_phone(phone)
-            attrs["phone"] = phone  # só anexa no fluxo público
+            attrs["phone"] = phone  
 
-        # 2) Regras de agenda
         weekday = date.weekday()
 
         working_hours = WorkingHour.objects.filter(barber_id=barber_id, weekday=weekday).first()
@@ -79,6 +86,7 @@ class AppointmentCreateSerializer(serializers.Serializer):
             start_time__lte=start_time,
             end_time__gt=start_time,
         ).exists()
+
         if is_blocked:
             raise serializers.ValidationError("Esse horário não está mais disponível.")
 
@@ -104,6 +112,10 @@ class AppointmentCreateSerializer(serializers.Serializer):
         ).exclude(status=AppointmentStatus.CANCELED).exists()
         if conflict:
             raise serializers.ValidationError("Esse horário não está mais disponível.")
+
+        appointment_exists = Appointment.objects.filter(client__phone=phone).filter(Q(status=AppointmentStatus.PENDING) | Q(status=AppointmentStatus.SCHEDULED)).exists()
+        if appointment_exists:
+            raise serializers.ValidationError("Você possui um agendamento pendente.")
 
         attrs["service"] = service
         attrs["end_time"] = end_time
@@ -133,6 +145,13 @@ class AppointmentCreateSerializer(serializers.Serializer):
         # fluxo público
         name = validated_data.get("name") or ""
         phone = validated_data["phone"]
+        key = f"create_attempts:{phone}"
+        attempts = r.get(key)
+        if attempts and int(attempts) >= 3:
+            raise serializers.ValidationError("Você atingiu o limite de tentativas. Tente novamente em 1 hora.")
+        r.incr(key)
+        r.expire(key, 3600)
+
         user, _ = User.objects.get_or_create(
             phone=phone,
             defaults={"name": name, "role": "client"},
@@ -147,7 +166,6 @@ class AppointmentCreateSerializer(serializers.Serializer):
             end_time=end_time,
             status=AppointmentStatus.PENDING,
         )
-
         code = generate_code()
         r.setex(f"login_code:{phone}", 300, code)
 
