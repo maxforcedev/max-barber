@@ -10,10 +10,14 @@ class BarberSerializer(serializers.ModelSerializer):
     services = ServiceSerializer(many=True, read_only=True)
     name = serializers.CharField(source="user.name", read_only=True)
     phone = serializers.CharField(source="user.phone", read_only=True)
+    is_active = serializers.SerializerMethodField()
 
     class Meta:
         model = Barber
-        fields = ["id", "name", "phone", "photo", "services"]
+        fields = ["id", "name", "phone", "photo", "services", "is_active"]
+
+    def get_is_active(self, obj):
+        return obj.user.is_active
 
 
 class BarberAvailabilitySerializer(serializers.Serializer):

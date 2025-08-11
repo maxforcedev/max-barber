@@ -70,7 +70,13 @@ class AppointmentCreateSerializer(serializers.Serializer):
             if not phone:
                 raise serializers.ValidationError({"phone": "Este campo é obrigatório."})
             phone = clean_phone(phone)
-            attrs["phone"] = phone  
+            attrs["phone"] = phone
+            appointment_exists = Appointment.objects.filter(client__phone=phone, status__in=[AppointmentStatus.PENDING, AppointmentStatus.SCHEDULED]).exists()
+        else:
+            appointment_exists = Appointment.objects.filter(client=request.user, status__in=[AppointmentStatus.PENDING, AppointmentStatus.SCHEDULED]).exists()
+
+        if appointment_exists:
+            raise serializers.ValidationError("Você possui um agendamento pendente.")
 
         weekday = date.weekday()
 
@@ -113,10 +119,6 @@ class AppointmentCreateSerializer(serializers.Serializer):
         ).exclude(status=AppointmentStatus.CANCELED).exists()
         if conflict:
             raise serializers.ValidationError("Esse horário não está mais disponível.")
-
-        appointment_exists = Appointment.objects.filter(client__phone=phone).filter(Q(status=AppointmentStatus.PENDING) | Q(status=AppointmentStatus.SCHEDULED)).exists()
-        if appointment_exists:
-            raise serializers.ValidationError("Você possui um agendamento pendente.")
 
         attrs["service"] = service
         attrs["end_time"] = end_time

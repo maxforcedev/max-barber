@@ -1,8 +1,9 @@
 from django.urls import path
-from .views import LoginView, SendLoginCodeView
+from . import views
 
 
 urlpatterns = [
-    path('auth/login/', LoginView.as_view(), name='login'),
-    path('auth/send-login-code/', SendLoginCodeView.as_view(), name='send-login-code'),
+    path('auth/login/', views.LoginView.as_view(), name='login'),
+    path('auth/send-login-code/', views.SendLoginCodeView.as_view(), name='send-login-code'),
+    path("clients/check", views.CheckClientView.as_view(), name="check-client"),
 ]
