@@ -8,6 +8,7 @@ from barbers.models import WorkingHour, BlockedTime
 from accounts.models import User
 from services.models import Service
 from .models import Appointment
+from django.utils import timezone
 from django.db.models import Q
 from django.conf import settings
 r = redis.Redis.from_url(settings.REDIS_URL)
@@ -177,7 +178,7 @@ class AppointmentConfirmSerializer(serializers.Serializer):
     code = serializers.CharField()
 
     def validate(self, attrs):
-        phone = attrs.get('phone')
+        phone = attrs.get("phone")
         code = attrs.get("code")
 
         if not phone:
@@ -190,36 +191,83 @@ class AppointmentConfirmSerializer(serializers.Serializer):
         redis_key = f"login_code:{phone}"
         saved_code = r.get(redis_key)
         user = User.objects.filter(phone=phone).first()
-
         if saved_code is None or saved_code.decode() != code:
-            if user:
-                Appointment.objects.filter(client=user, status=AppointmentStatus.PENDING).delete()
-                raise serializers.ValidationError({"code": "Código inválido ou expirado."})
+            raise serializers.ValidationError({"code": "Código inválido ou expirado."})
 
         if not user:
             raise serializers.ValidationError({"phone": "Usuário não encontrado."})
 
-        appointment = Appointment.objects.filter(client=user, status=AppointmentStatus.PENDING).order_by("-created_at").first()
+        appointment = Appointment.objects.filter(
+            client=user,
+            status=AppointmentStatus.PENDING
+        ).order_by("-created_at").first()
 
-        if appointment:
-            appointment.status = AppointmentStatus.SCHEDULED
-            appointment.save()
-            r.delete(redis_key)
-        else:
+        if not appointment:
             raise serializers.ValidationError({"appointment": "Nenhum agendamento pendente encontrado."})
+
+        appointment.status = AppointmentStatus.SCHEDULED
+        appointment.save()
+        r.delete(redis_key)
 
         refresh = RefreshToken.for_user(user)
 
         return {
-            "access": str(refresh.access_token),
-            "refresh": str(refresh),
-            "user": {
-                "name": user.name,
-                "phone": user.phone,
-            },
-            "appointment_id": appointment.id if appointment else None
+            "status": "ok",
+            "message": "Agendamento confirmado com sucesso.",
+            "data": {
+                "access": str(refresh.access_token),
+                "refresh": str(refresh),
+                "user": {
+                    "name": user.name,
+                    "phone": user.phone,
+                },
+                "appointment_id": appointment.id
+            }
         }
 
 
 class AppointmentCancelSerializer(serializers.Serializer):
     reason = serializers.CharField(required=False, allow_blank=True)
+
+    def validate(self, attrs):
+        request = self.context.get("request")
+        pk = self.context.get("pk")
+        reason = attrs.get("reason", "")
+
+        try:
+            appointment = Appointment.objects.get(pk=pk)
+        except Appointment.DoesNotExist:
+            raise serializers.ValidationError({"message": "Agendamento não encontrado."})
+
+        if request.user.role == "client" and appointment.client != request.user:
+            raise serializers.ValidationError({"message": "Você não tem permissão para cancelar este agendamento."})
+
+        if appointment.status not in [AppointmentStatus.PENDING, AppointmentStatus.SCHEDULED]:
+            raise serializers.ValidationError({"message": "Agendamento já está cancelado ou finalizado."})
+
+        start_dt = datetime.combine(appointment.date, appointment.start_time)
+        if timezone.is_naive(start_dt):
+            start_dt = timezone.make_aware(start_dt)
+        now = timezone.now()
+        if start_dt - now < timedelta(hours=2):
+            raise serializers.ValidationError({"message": "Cancelamento não permitido (menos de 2h de antecedência)."})
+
+        attrs["appointment"] = appointment
+        attrs["reason"] = reason
+        return attrs
+
+    def save(self):
+        request = self.context.get("request")
+        appointment = self.validated_data["appointment"]
+        reason = self.validated_data["reason"]
+
+        canceled_by = "client"
+        if request.user.role in ["barber", "admin"]:
+            canceled_by = request.user.role
+
+        appointment.cancel(reason=reason, canceled_by=canceled_by)
+        return {
+            "appointment_id": appointment.id,
+            "canceled_by": canceled_by,
+            "reason": reason
+        }
