@@ -4,6 +4,6 @@ from .serializers import ServiceSerializer
 
 
 class ServiceViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Service.objects.all()
+    queryset = Service.objects.filter(is_active=True)
     serializer_class = ServiceSerializer
     pagination_class = None
