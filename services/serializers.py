@@ -8,7 +8,7 @@ class ServiceSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Service
-        fields = ["id", "name", "duration_min", "price"]
+        fields = ["id", "name", "duration_min", "price", 'detail', '']
 
     def get_price(self, obj):
         return float(obj.price)
