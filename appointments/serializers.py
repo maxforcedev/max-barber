@@ -10,7 +10,9 @@ from services.models import Service
 from .models import Appointment
 from django.utils import timezone
 from django.conf import settings
+from plans.models import PlanSubscription, PlanSubscriptionCredit
 r = redis.Redis.from_url(settings.REDIS_URL)
+
 
 
 class AppointmentSerializer(serializers.ModelSerializer):
@@ -47,6 +49,9 @@ class AppointmentSerializer(serializers.ModelSerializer):
         return mapping.get(obj.canceled_by, obj.canceled_by or "—")
 
 
+from plans.models import PlanSubscription, PlanSubscriptionCredit
+from django.utils import timezone
+
 class AppointmentCreateSerializer(serializers.Serializer):
     name = serializers.CharField(required=False, allow_blank=True)
     phone = serializers.CharField(required=False, allow_blank=True)
@@ -54,6 +59,7 @@ class AppointmentCreateSerializer(serializers.Serializer):
     barber_id = serializers.IntegerField()
     date = serializers.DateField()
     start_time = serializers.TimeField()
+    use_plan = serializers.BooleanField(required=False, default=False)
 
     def validate(self, attrs):
         request = self.context.get("request")
@@ -70,15 +76,20 @@ class AppointmentCreateSerializer(serializers.Serializer):
                 raise serializers.ValidationError({"phone": "Este campo é obrigatório."})
             phone = clean_phone(phone)
             attrs["phone"] = phone
-            appointment_exists = Appointment.objects.filter(client__phone=phone, status__in=[AppointmentStatus.PENDING, AppointmentStatus.SCHEDULED]).exists()
+            appointment_exists = Appointment.objects.filter(
+                client__phone=phone,
+                status__in=[AppointmentStatus.PENDING, AppointmentStatus.SCHEDULED]
+            ).exists()
         else:
-            appointment_exists = Appointment.objects.filter(client=request.user, status__in=[AppointmentStatus.PENDING, AppointmentStatus.SCHEDULED]).exists()
+            appointment_exists = Appointment.objects.filter(
+                client=request.user,
+                status__in=[AppointmentStatus.PENDING, AppointmentStatus.SCHEDULED]
+            ).exists()
 
         if appointment_exists:
             raise serializers.ValidationError("Você possui um agendamento aberto ou pendente.")
 
         weekday = date.weekday()
-
         working_hours = WorkingHour.objects.filter(barber_id=barber_id, weekday=weekday).first()
         if not working_hours:
             raise serializers.ValidationError("Barbeiro(a) não irá funcionar nesse dia.")
@@ -92,7 +103,6 @@ class AppointmentCreateSerializer(serializers.Serializer):
             start_time__lte=start_time,
             end_time__gt=start_time,
         ).exists()
-
         if is_blocked:
             raise serializers.ValidationError("Esse horário não está mais disponível.")
 
@@ -121,6 +131,34 @@ class AppointmentCreateSerializer(serializers.Serializer):
 
         attrs["service"] = service
         attrs["end_time"] = end_time
+
+        user_lookup = None
+        if is_public:
+            user_lookup = User.objects.filter(phone=attrs["phone"]).first()
+        else:
+            user_lookup = request.user
+
+        attrs["can_use_plan"] = False
+        attrs["remaining_credits"] = 0
+        attrs["plan_name"] = None
+
+        if user_lookup:
+            active_plan = PlanSubscription.objects.filter(
+                user=user_lookup,
+                status="active",
+                end_date__gte=timezone.now().date()
+            ).first()
+
+            if active_plan:
+                credit = PlanSubscriptionCredit.objects.filter(
+                    subscription=active_plan,
+                    service_id=service_id
+                ).first()
+                if credit and credit.remaining > 0:
+                    attrs["can_use_plan"] = True
+                    attrs["remaining_credits"] = credit.remaining
+                    attrs["plan_name"] = active_plan.plan.name
+
         return attrs
 
     def create(self, validated_data):
@@ -132,7 +170,6 @@ class AppointmentCreateSerializer(serializers.Serializer):
         end_time = validated_data["end_time"]
 
         if request and request.user and request.user.is_authenticated:
-            # cria direto
             user = request.user
             appointment = Appointment.objects.create(
                 client=user,
@@ -143,9 +180,15 @@ class AppointmentCreateSerializer(serializers.Serializer):
                 end_time=end_time,
                 status=AppointmentStatus.SCHEDULED,
             )
-            return {"appointment_id": appointment.id, "code_sent": False}
+            return {
+                "appointment_id": appointment.id,
+                "code_sent": False,
+                "can_use_plan": validated_data.get("can_use_plan", False),
+                "remaining_credits": validated_data.get("remaining_credits", 0),
+                "plan_name": validated_data.get("plan_name")
+            }
 
-        # fluxo público → só enviar código, não criar
+        # Fluxo público → envio de código
         name = validated_data.get("name") or ""
         phone = validated_data["phone"]
 
@@ -168,7 +211,13 @@ class AppointmentCreateSerializer(serializers.Serializer):
         code = generate_code()
         r.setex(f"login_code:{phone}", 300, code)
 
-        return {"code_sent": True}
+        return {
+            "code_sent": True,
+            "can_use_plan": validated_data.get("can_use_plan", False),
+            "remaining_credits": validated_data.get("remaining_credits", 0),
+            "plan_name": validated_data.get("plan_name")
+        }
+
 
 
 class AppointmentConfirmSerializer(serializers.Serializer):
