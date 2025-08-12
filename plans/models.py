@@ -1,4 +1,7 @@
 from django.db import models
+from django.utils import timezone
+from accounts.models import User
+from services.models import Service
 
 
 class Plan(models.Model):
@@ -44,3 +47,39 @@ class PlanBenefit(models.Model):
 
     def __str__(self):
         return f"{self.quantity}x {self.service.name} ({self.plan.name})"
+
+
+class PlanSubscription(models.Model):
+    STATUS_CHOICES = [
+        ("active", "Ativo"),
+        ("expired", "Vencido"),
+        ("canceled", "Cancelado"),
+        ("paused", "Pausado"),
+    ]
+
+    user = models.ForeignKey(User, related_name="subscriptions", on_delete=models.CASCADE)
+    plan = models.ForeignKey(Plan, related_name="subscriptions", on_delete=models.CASCADE)
+    start_date = models.DateField(default=timezone.now)
+    end_date = models.DateField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="active")
+
+    def __str__(self):
+        return f"{self.user.name} - {self.plan.name}"
+
+    def save(self, *args, **kwargs):
+        if not self.end_date:
+            self.end_date = self.start_date + timezone.timedelta(days=self.plan.duration_days)
+        super().save(*args, **kwargs)
+
+
+class PlanSubscriptionCredit(models.Model):
+    subscription = models.ForeignKey(PlanSubscription, related_name="credits", on_delete=models.CASCADE)
+    service = models.ForeignKey(Service, on_delete=models.CASCADE)
+    used = models.PositiveIntegerField(default=0)
+    total = models.PositiveIntegerField(default=0)
+
+    def remaining(self):
+        return self.total - self.used
+
+    def __str__(self):
+        return f"{self.service.name}: {self.used}/{self.total}"
