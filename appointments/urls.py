@@ -4,6 +4,6 @@ from .views import AppointmentCreateView, AppointmentConfirmView, AppointmentsLi
 urlpatterns = [
     path("appointments/create/", AppointmentCreateView.as_view(), name="appointment-initiate"),
     path("appointments/confirm/", AppointmentConfirmView.as_view(), name="appointment-confirm"),
-    path("appointments/<int:pk>/cancel/", AppointmentCancelView.as_view(), name="appointment-confirm"),
+    path("appointments/<int:pk>/cancel/", AppointmentCancelView.as_view(), name="appointment-cancel"),
     path("appointments/me/", AppointmentsListView.as_view(), name="my-appointments"),
 ]

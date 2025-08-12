@@ -22,15 +22,16 @@ class SendLoginCodeView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-class CheckClientView(APIView):
+class ClientCheckView(APIView):
+
     def get(self, request):
-        phone = request.GET.get("phone")
-        phone = clean_phone(phone)
+        raw_phone = request.query_params.get("phone", "")
+        phone = clean_phone(raw_phone)
 
-        if not phone:
-            return Response({"exists": False}, status=400)
+        user = User.objects.filter(phone=phone).first()
 
-        client = User.objects.filter(phone=phone, role="client").first()
-        if client:
-            return Response({"exists": True, "nome": client.name})
-        return Response({"exists": False})
+        return Response({
+            "exists": bool(user),
+            "name": user.name if user else None,
+            "phone": phone
+        })

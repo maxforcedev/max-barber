@@ -12,3 +12,9 @@ class ServiceSerializer(serializers.ModelSerializer):
 
     def get_price(self, obj):
         return float(obj.price)
+
+    def get_photo(self, obj):
+        request = self.context.get('request')
+        if obj.photo:
+            return request.build_absolute_uri(obj.photo.url)
+        return None

@@ -43,7 +43,8 @@ INSTALLED_APPS = [
     'accounts',
     'barbers',
     'services',
-    'appointments'
+    'appointments',
+    'barbershops'
 ]
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",

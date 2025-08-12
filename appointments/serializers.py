@@ -75,7 +75,7 @@ class AppointmentCreateSerializer(serializers.Serializer):
             appointment_exists = Appointment.objects.filter(client=request.user, status__in=[AppointmentStatus.PENDING, AppointmentStatus.SCHEDULED]).exists()
 
         if appointment_exists:
-            raise serializers.ValidationError("Você possui um agendamento pendente.")
+            raise serializers.ValidationError("Você possui um agendamento aberto ou pendente.")
 
         weekday = date.weekday()
 
@@ -156,12 +156,14 @@ class AppointmentCreateSerializer(serializers.Serializer):
         r.incr(key)
         r.expire(key, 3600)
 
-        # garante que o usuário existe, mas sem criar agendamento ainda
-        User.objects.get_or_create(
+        user, created = User.objects.get_or_create(
             phone=phone,
             defaults={"name": name, "role": UserRole.CLIENT},
         )
-        r.setex(f"login_name:{phone}", 300, name)
+        if not created and name:
+            user.name = name
+            user.save()
+        r.setex(f"login_name:{phone}", 300, name or user.name)
 
         code = generate_code()
         r.setex(f"login_code:{phone}", 300, code)
@@ -245,13 +247,12 @@ class AppointmentConfirmSerializer(serializers.Serializer):
             name = r.get(f"login_name:{phone}")
             name = name.decode() if name else "Usuário"
 
-        user, created = User.objects.get_or_create(
+        name = r.get(f"login_name:{phone}")
+        name = name.decode() if name else "Usuário"
+        user, _ = User.objects.get_or_create(
             phone=phone,
-            defaults={"name": name, "role": UserRole.CLIENT}
+            defaults={"name": name, "role": UserRole.CLIENT},
         )
-        if not created and not user.name and name:
-            user.name = name
-            user.save()
 
         appointment = Appointment.objects.create(
             client=user,
@@ -276,6 +277,7 @@ class AppointmentConfirmSerializer(serializers.Serializer):
             "access": str(refresh.access_token),
             "refresh": str(refresh)
         }
+
 
 class AppointmentCancelSerializer(serializers.Serializer):
     reason = serializers.CharField(required=False, allow_blank=True)

@@ -13,7 +13,7 @@ class UserAdmin(BaseUserAdmin):
     exclude = ('username',)
 
     list_display = ('id', 'phone', 'name', 'email', 'role', 'is_active', 'is_staff')
-    list_filter = ('role', 'is_active', 'is_staff')
+    list_filter = ('role', 'is_active', 'is_staff', 'is_admin')
     search_fields = ('phone', 'email', 'name')
     ordering = ('date_joined',)
     readonly_fields = ('date_joined',)
@@ -21,7 +21,7 @@ class UserAdmin(BaseUserAdmin):
     fieldsets = (
         (None, {'fields': ('phone', 'password')}),
         ('Informações pessoais', {'fields': ('name', 'email', 'role')}),
-        ('Permissões', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
+        ('Permissões', {'fields': ('is_active', 'is_staff', 'is_superuser', 'is_admin', 'groups', 'user_permissions')}),
         ('Datas', {'fields': ('last_login', 'date_joined')}),
     )
 
