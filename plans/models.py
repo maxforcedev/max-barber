@@ -5,17 +5,22 @@ class Plan(models.Model):
     name = models.CharField(max_length=100)
     slug = models.SlugField(unique=True)
     price = models.DecimalField(max_digits=8, decimal_places=2)
-    price_original = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
     duration_days = models.PositiveIntegerField(default=30)
     is_popular = models.BooleanField(default=False)
     color = models.CharField(max_length=50, blank=True, null=True)
     card_color = models.CharField(max_length=50, blank=True, null=True)
 
     @property
+    def price_original(self):
+        """Soma do valor dos serviços no plano."""
+        total = 0
+        for benefit in self.benefits.select_related("service").all():
+            total += benefit.service.price * benefit.quantity
+        return total
+
+    @property
     def economia(self):
-        if self.price_original:
-            return float(self.price_original - self.price)
-        return 0
+        return float(self.price_original - self.price) if self.price_original else 0
 
     def __str__(self):
         return self.name
