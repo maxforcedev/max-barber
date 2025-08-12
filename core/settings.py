@@ -31,6 +31,7 @@ CELERY_BEAT_SCHEDULE = {
     },
 }
 
+
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',

@@ -134,6 +134,34 @@ class AppointmentCreateSerializer(serializers.Serializer):
         else:
             user_lookup = request.user
 
+        if attrs.get("use_plan"):
+            if is_public:
+                client = User.objects.filter(phone=attrs["phone"]).first()
+            else:
+                client = request.user
+
+            if not client:
+                raise serializers.ValidationError("Cliente não encontrado para uso do plano.")
+
+            subscription = PlanSubscription.objects.filter(
+                user=client,
+                status="active",
+            ).first()
+
+            if not subscription:
+                raise serializers.ValidationError("Nenhum plano ativo encontrado para este cliente.")
+
+            credits = PlanSubscriptionCredit.objects.filter(
+                subscription=subscription,
+                service_id=service_id,
+                used=False
+            )
+
+            if not credits.exists():
+                raise serializers.ValidationError("Você não possui créditos disponíveis para este serviço.")
+
+            attrs["plan_credit"] = credits.first()
+
         attrs["can_use_plan"] = False
         attrs["remaining_credits"] = 0
         attrs["plan_name"] = None
@@ -150,9 +178,9 @@ class AppointmentCreateSerializer(serializers.Serializer):
                     subscription=active_plan,
                     service_id=service_id
                 ).first()
-                if credit and credit.remaining > 0:
+                if credit and credit.remaining() > 0:
                     attrs["can_use_plan"] = True
-                    attrs["remaining_credits"] = credit.remaining
+                    attrs["remaining_credits"] = credit.remaining()
                     attrs["plan_name"] = active_plan.plan.name
 
         return attrs
@@ -175,7 +203,16 @@ class AppointmentCreateSerializer(serializers.Serializer):
                 start_time=start_time,
                 end_time=end_time,
                 status=AppointmentStatus.SCHEDULED,
+                paid_with_plan=validated_data.get("use_plan", False),
+                plan_subscription=validated_data.get("plan_credit").subscription if validated_data.get("plan_credit") else None
+
             )
+
+            if validated_data.get("plan_credit"):
+                credit = validated_data["plan_credit"]
+                credit.used += 1
+                credit.save()
+
             return {
                 "appointment_id": appointment.id,
                 "code_sent": False,
@@ -184,16 +221,15 @@ class AppointmentCreateSerializer(serializers.Serializer):
                 "plan_name": validated_data.get("plan_name")
             }
 
-        # Fluxo público → envio de código
         name = validated_data.get("name") or ""
         phone = validated_data["phone"]
 
-        key = f"create_attempts:{phone}"
-        attempts = r.get(key)
-        if attempts and int(attempts) >= 3:
-            raise serializers.ValidationError("Você atingiu o limite de tentativas. Tente novamente em 1 hora.")
-        r.incr(key)
-        r.expire(key, 3600)
+        # key = f"create_attempts:{phone}"
+        # attempts = r.get(key)
+        # if attempts and int(attempts) >= 3:
+        #     raise serializers.ValidationError("Você atingiu o limite de tentativas. Tente novamente em 1 hora.")
+        # r.incr(key)
+        # r.expire(key, 3600)
 
         user, created = User.objects.get_or_create(
             phone=phone,
@@ -290,11 +326,13 @@ class AppointmentConfirmSerializer(serializers.Serializer):
                 service_id=service.id
             ).first()
 
-            if not credit_entry or credit_entry.remaining <= 0:
+            if not credit_entry or credit_entry.remaining() <= 0:
                 raise serializers.ValidationError("Você não possui créditos disponíveis para este serviço.")
 
             attrs["plan_subscription"] = subscription
             attrs["credit_entry"] = credit_entry
+            if not attrs.get("plan_subscription") or not attrs.get("credit_entry"):
+                attrs["use_plan"] = False
 
         return attrs
 
@@ -323,7 +361,7 @@ class AppointmentConfirmSerializer(serializers.Serializer):
 
         if validated_data.get("use_plan") and validated_data.get("credit_entry"):
             credit_entry = validated_data["credit_entry"]
-            credit_entry.remaining -= 1
+            credit_entry.used += 1  # incrementa uso
             credit_entry.save()
 
         r.delete(f"login_code:{phone}")
@@ -337,6 +375,7 @@ class AppointmentConfirmSerializer(serializers.Serializer):
             "access": str(refresh.access_token),
             "refresh": str(refresh)
         }
+
 
 
 class AppointmentCancelSerializer(serializers.Serializer):

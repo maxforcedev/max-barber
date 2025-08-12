@@ -8,6 +8,8 @@ class UserManager(BaseUserManager):
     def create_user(self, phone, name, password=None, **extra_fields):
         if not phone:
             raise ValueError('O numero de telefone é obrigatorio.')
+        if not name:
+            raise ValueError('O nome é obrigatorio.')
 
         user = self.model(phone=phone, name=name, **extra_fields)
         user.set_password(password)
@@ -32,13 +34,14 @@ class User(AbstractBaseUser, PermissionsMixin):
     email = models.EmailField(unique=True, blank=True, null=True)
     phone = models.CharField(max_length=15, unique=True)
     name = models.CharField(max_length=100)
+
+    role = models.CharField(max_length=20, choices=UserRole.choices, default=UserRole.CLIENT)
+
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     is_admin = models.BooleanField(default=False)
-    role = models.CharField(max_length=20, choices=UserRole.choices, default=UserRole.CLIENT)
 
     date_joined = models.DateTimeField(auto_now_add=True)
-
     objects = UserManager()
 
     USERNAME_FIELD = 'phone'
