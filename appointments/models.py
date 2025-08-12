@@ -17,6 +17,14 @@ class Appointment(models.Model):
         choices=AppointmentStatus.choices,
         default=AppointmentStatus.PENDING
     )
+    paid_with_plan = models.BooleanField(default=False)
+    plan_subscription = models.ForeignKey(
+            'plans.PlanSubscription',
+            on_delete=models.SET_NULL,
+            null=True,
+            blank=True,
+            related_name='appointments'
+        )
 
     created_at = models.DateTimeField(auto_now_add=True)
 

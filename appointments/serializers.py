@@ -14,7 +14,6 @@ from plans.models import PlanSubscription, PlanSubscriptionCredit
 r = redis.Redis.from_url(settings.REDIS_URL)
 
 
-
 class AppointmentSerializer(serializers.ModelSerializer):
     barber = serializers.SerializerMethodField()
     service = serializers.SerializerMethodField()
@@ -48,9 +47,6 @@ class AppointmentSerializer(serializers.ModelSerializer):
         }
         return mapping.get(obj.canceled_by, obj.canceled_by or "—")
 
-
-from plans.models import PlanSubscription, PlanSubscriptionCredit
-from django.utils import timezone
 
 class AppointmentCreateSerializer(serializers.Serializer):
     name = serializers.CharField(required=False, allow_blank=True)
@@ -321,7 +317,8 @@ class AppointmentConfirmSerializer(serializers.Serializer):
             start_time=validated_data["start_time"],
             end_time=validated_data["end_time"],
             status=AppointmentStatus.SCHEDULED,
-            paid_with_plan=validated_data.get("use_plan", False)
+            paid_with_plan=validated_data.get("use_plan", False),
+            plan_subscription=validated_data.get("plan_subscription")
         )
 
         if validated_data.get("use_plan") and validated_data.get("credit_entry"):
