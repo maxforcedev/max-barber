@@ -1,4 +1,3 @@
-import re
 import redis
 from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
