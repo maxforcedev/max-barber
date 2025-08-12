@@ -1,5 +1,6 @@
 from django.contrib import admin
 from .models import Plan, PlanBenefit, PlanSubscription, PlanSubscriptionCredit
+from .signals import create_plan_subscription_credits
 
 
 class PlanBenefitInline(admin.TabularInline):
@@ -61,6 +62,12 @@ class PlanSubscriptionAdmin(admin.ModelAdmin):
     search_fields = ("user__name", "user__phone", "plan__name")
     autocomplete_fields = ["user", "plan"]
     inlines = [PlanSubscriptionCreditInline]
+
+    def save_model(self, request, obj, form, change):
+
+        super().save_model(request, obj, form, change)
+        if not obj.credits.exists():
+            create_plan_subscription_credits(PlanSubscription, obj, created=True)
 
 
 @admin.register(PlanSubscriptionCredit)
