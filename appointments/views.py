@@ -14,25 +14,19 @@ class AppointmentCreateView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        print(request.data)
         serializer = AppointmentCreateSerializer(data=request.data, context={"request": request})
-
         if serializer.is_valid():
-            print("Erros de validação:", serializer.errors)
             data = serializer.save()
             return Response(data, status=status.HTTP_201_CREATED)
-        print("Erros de validação:", serializer.errors)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class AppointmentConfirmView(APIView):
     def post(self, request):
-        print(request.data)
         serializer = AppointmentConfirmSerializer(data=request.data)
         if serializer.is_valid():
             data = serializer.save()
             return Response(data, status=status.HTTP_200_OK)
-        print("Erros de validação:", serializer.errors)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -47,10 +41,9 @@ class AppointmentCancelView(APIView):
         if serializer.is_valid():
             data = serializer.save()
             return Response({"status": "ok", "message": "Agendamento cancelado com sucesso.", "data": data}, status=status.HTTP_200_OK)
-        print("Erros de validação:", serializer.errors)
         return Response({"status": "error", "message": "Não foi possível cancelar o agendamento.", "data": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
-
+# ALTERAR FUTURAMENTE
 class AppointmentsListView(generics.ListAPIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [permissions.IsAuthenticated]
