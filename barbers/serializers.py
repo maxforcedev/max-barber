@@ -26,11 +26,11 @@ class BarberAvailabilitySerializer(serializers.Serializer):
 
     def validate(self, attrs):
         barber_id = self.context.get("barber_id")
-        if not barber_id:
-            raise serializers.ValidationError({"barber_id": "Barbeiro não informado no contexto."})
-
         date = attrs["date"]
         service_id = attrs["service_id"]
+
+        if not barber_id:
+            raise serializers.ValidationError({"barber_id": "Barbeiro não informado no contexto."})
 
         if date < timezone.localdate():
             raise serializers.ValidationError({"date": "Data no passado não é permitida."})
@@ -45,6 +45,7 @@ class BarberAvailabilitySerializer(serializers.Serializer):
             "service": service,
             "available_slots": slots,
         })
+
         if not slots:
             attrs["message"] = "Nenhum horário disponível para este dia."
         return attrs

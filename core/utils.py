@@ -61,7 +61,6 @@ def validate_code(code, key, phone, r=None):
     return True
 
 
-
 def get_available_slots(barber_id, date, service):
 
     weekday = date.weekday()
