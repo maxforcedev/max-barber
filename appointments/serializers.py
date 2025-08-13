@@ -110,7 +110,7 @@ class AppointmentCreateSerializer(serializers.Serializer):
         end_time = end_dt.time()
 
         conflict = Appointment.objects.filter(
-            barber_id=barber_id, date=date, start_time__lt=end_time,
+            barber_id=barber_id, date=date, start_time__lt=end_time, end_time__gt=start_time
         ).exclude(status=AppointmentStatus.CANCELED).exists()
 
         if conflict:
@@ -179,7 +179,7 @@ class AppointmentCreateSerializer(serializers.Serializer):
 
         return attrs
 
-    def _create_authenticaded_appointment(validated_data, request):
+    def _create_authenticaded_appointment(self, validated_data, request):
         user = request.user
         service = validated_data["service"]
         barber = validated_data["barber_id"]
@@ -211,7 +211,7 @@ class AppointmentCreateSerializer(serializers.Serializer):
             "plan_name": validated_data.get("plan_name")
         }
 
-    def _create_public_appointment(validated_data):
+    def _create_public_appointment(self, validated_data):
         name = validated_data.get("name")
         phone = validated_data["phone"]
 
@@ -291,6 +291,29 @@ class AppointmentConfirmSerializer(serializers.Serializer):
             raise serializers.ValidationError('Esse horário não está mais disponível.')
         return attrs
 
+    def _validate_slot(self, attrs):
+        barber_id = attrs.get('barber_id')
+        date = attrs.get('date')
+        start_time = attrs.get('start_time')
+        service = attrs.get('service')
+
+        slots = get_available_slots(barber_id, date, service)
+        if start_time.strftime('%H:%M') not in slots:
+            raise serializers.ValidationError('Horário inválido ou indisponível.')
+
+        start_dt = datetime.combine(date, start_time)
+        end_dt = start_dt + timedelta(minutes=service.duration)
+        end_time = end_dt.time()
+
+        conflict = Appointment.objects.filter(
+            barber_id=barber_id, date=date, start_time__lt=end_time, end_time__gt=start_time
+        ).exclude(status=AppointmentStatus.CANCELED).exists()
+
+        if conflict:
+            raise serializers.ValidationError('Esse horário não está mais disponível.')
+        attrs['end_time'] = end_time
+        return attrs
+
     def _validate_plan(self, attrs, request, is_public):
         if attrs.get('use_plan'):
             client = User.objects.filter(phone=attrs.get("phone")).first() if is_public else request.user
@@ -317,6 +340,24 @@ class AppointmentConfirmSerializer(serializers.Serializer):
 
         attrs["plan_credit"] = credits
         attrs['plan_subscription'] = subscription
+        return attrs
+
+    def validate(self, attrs):
+        request = self.context.get("request")
+        is_public = not request.user.is_authenticated
+
+        attrs = self._validate_phone(attrs)
+        attrs = self._check_existing_appointment(attrs, request, attrs.get("phone"), is_public)
+        attrs = self._validate_code(attrs)
+        attrs = self._validate_availability(attrs)
+
+        attrs = self._validate_service(attrs)
+        attrs = self._validate_slot(attrs)
+        attrs = self._validate_plan(attrs, request, is_public)
+
+        if attrs.get("use_plan"):
+            attrs = self._validate_credits_plan(attrs)
+
         return attrs
 
     def create(self, validated_data):
@@ -350,7 +391,6 @@ class AppointmentConfirmSerializer(serializers.Serializer):
             'access': str(refresh.access_token),
             'refresh': str(refresh)
         }
-
 
 
 

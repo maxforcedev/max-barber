@@ -6,25 +6,15 @@ from core.choices import AppointmentStatus, UserRole
 class Appointment(models.Model):
     client = models.ForeignKey('accounts.User', on_delete=models.CASCADE, related_name='appointments')
     barber = models.ForeignKey('barbers.Barber', on_delete=models.CASCADE, related_name='appointments')
-    service = models.ForeignKey('services.Service', on_delete=models.PROTECT)
+    service = models.ForeignKey('services.Service', on_delete=models.PROTECT, related_name='appointments')
 
     date = models.DateField()
     start_time = models.TimeField()
     end_time = models.TimeField()
 
-    status = models.CharField(
-        max_length=20,
-        choices=AppointmentStatus.choices,
-        default=AppointmentStatus.PENDING
-    )
+    status = models.CharField(max_length=20, choices=AppointmentStatus.choices, default=AppointmentStatus.PENDING)
     paid_with_plan = models.BooleanField(default=False)
-    plan_subscription = models.ForeignKey(
-            'plans.PlanSubscription',
-            on_delete=models.SET_NULL,
-            null=True,
-            blank=True,
-            related_name='appointments'
-        )
+    plan_subscription = models.ForeignKey('plans.PlanSubscription', on_delete=models.SET_NULL, null=True, blank=True, related_name='appointments')
 
     created_at = models.DateTimeField(auto_now_add=True)
 
