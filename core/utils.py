@@ -61,6 +61,13 @@ def validate_code(code, key, phone, r=None):
     return True
 
 
+def delete_key_redis(phone):
+    r = redis_client
+
+    r.delete(f'login_code:{phone}')
+    r.delete(f'login_name:{phone}')
+
+
 def get_available_slots(barber_id, date, service):
 
     weekday = date.weekday()

@@ -1,17 +1,14 @@
-import redis
 from datetime import datetime, timedelta
 from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
-from core.utils import clean_phone, generate_code, get_available_slots
+from core.utils import clean_phone, generate_code, get_available_slots, validate_code, delete_key_redis
 from core.choices import AppointmentStatus, UserRole
 from barbers.models import WorkingHour, BlockedTime
 from accounts.models import User
 from services.models import Service
 from .models import Appointment
 from django.utils import timezone
-from django.conf import settings
 from plans.models import PlanSubscription, PlanSubscriptionCredit
-r = redis.Redis.from_url(settings.REDIS_URL)
 
 
 class AppointmentSerializer(serializers.ModelSerializer):
@@ -113,7 +110,7 @@ class AppointmentCreateSerializer(serializers.Serializer):
         end_time = end_dt.time()
 
         conflict = Appointment.objects.filter(
-            barber_id=barber_id, date=date, start_time__lt=end_time, end_time__gt=start_time
+            barber_id=barber_id, date=date, start_time__lt=end_time,
         ).exclude(status=AppointmentStatus.CANCELED).exists()
 
         if conflict:
@@ -127,7 +124,7 @@ class AppointmentCreateSerializer(serializers.Serializer):
             if not client:
                 raise serializers.ValidationError('Cliente não encontrado para o uso do plano.')
 
-            subscription = PlanSubscription.objects.filter(user=client, status='active').first()
+            subscription = PlanSubscription.objects.filter(user=client, status='active', end_date__gte=timezone.now().date()).first()
             if not subscription:
                 raise serializers.ValidationError('O cliente não possui plano ativo.')
 
@@ -238,6 +235,121 @@ class AppointmentCreateSerializer(serializers.Serializer):
             return self._create_authenticaded_appointment(validated_data, request)
         else:
             return self._create_public_appointment(validated_data)
+
+
+class AppointmentConfirmSerializer(serializers.Serializer):
+    phone = serializers.CharField()
+    code = serializers.CharField()
+    service_id = serializers.IntegerField()
+    barber_id = serializers.IntegerField()
+    date = serializers.DateField()
+    start_time = serializers.TimeField()
+    use_plan = serializers.BooleanField(required=False, default=False)
+
+    def _validate_phone(self, attrs):
+        attrs['phone'] = clean_phone(attrs.get('phone'))
+        return attrs
+
+    def _check_existing_appointment(self, attrs, request, phone, is_public):
+        status = [AppointmentStatus.PENDING, AppointmentStatus.SCHEDULED]
+        if is_public:
+            phone = attrs.get('phone')
+            exists = Appointment.objects.filter(client__phone=phone, status__in=status).exists()
+        else:
+            exists = Appointment.objects.filter(client=request.user, status__in=status).exists()
+        if exists:
+            raise serializers.ValidationError('Você já tem agendamento aberto ou pendente.')
+        return attrs
+
+    def _validate_code(self, attrs):
+        code = attrs['code']
+        phone = attrs['phone']
+        validate_code(code, f'login_code:{phone}', phone)
+        return attrs
+
+    def _validate_service(self, attrs):
+        try:
+            attrs['service'] = Service.objects.get(id=attrs['service_id'])
+        except Service.DoesNotExist:
+            raise serializers.ValidationError('Serviço inválido ou não disponivel.')
+        return attrs
+
+    def _validate_availability(self, attrs):
+        date = attrs.get('date')
+        barber_id = attrs.get('barber_id')
+        start_time = attrs.get('start_time')
+        weekday = date.weekday()
+        working_hours = WorkingHour.objects.only('start_time', 'end_time').filter(barber_id=barber_id, weekday=weekday).first()
+
+        if not working_hours:
+            raise serializers.ValidationError('Barbeiro(a) não irá funcionar nesse dia.')
+        if not (working_hours.start_time <= start_time < working_hours.end_time):
+            raise serializers.ValidationError('Horário fora do expediente do barbeiro.')
+
+        is_blocked = BlockedTime.objects.filter(barber_id=barber_id, date=date, start_time__lte=start_time, end_time__gt=start_time).exists()
+        if is_blocked:
+            raise serializers.ValidationError('Esse horário não está mais disponível.')
+        return attrs
+
+    def _validate_plan(self, attrs, request, is_public):
+        if attrs.get('use_plan'):
+            client = User.objects.filter(phone=attrs.get("phone")).first() if is_public else request.user
+            if not client:
+                raise serializers.ValidationError('Cliente não encontrado para o uso do plano.')
+            attrs['name'] = client.name or 'Usuario'
+
+            subscription = PlanSubscription.objects.filter(user=client, status='active', end_date__gte=timezone.now().date()).first()
+            attrs['subscription'] = subscription
+
+            if not subscription:
+                raise serializers.ValidationError('O cliente não possui plano ativo.')
+        return attrs
+
+    def _validate_credits_plan(self, attrs):
+        service_id = attrs["service"].id
+        subscription = attrs['subscription']
+        credits = PlanSubscriptionCredit.objects.filter(subscription=subscription, service_id=service_id, used=False).first()
+        if not credits or credits.remaining() <= 0:
+            raise serializers.ValidationError("Você não possui créditos disponíveis para este serviço.")
+
+        if not attrs.get('plan_subscription') or not attrs['plan_credit']:
+            attrs['use_plan'] = False
+
+        attrs["plan_credit"] = credits
+        attrs['plan_subscription'] = subscription
+        return attrs
+
+    def create(self, validated_data):
+        phone = validated_data['phone']
+        name = validated_data['name'] or 'Usuario'
+
+        user, _ = User.objects.get_or_create(phone=phone, defaults={'name': name, 'role': UserRole.CLIENT})
+
+        appointment = Appointment.objects.create(
+            client=user,
+            service=validated_data['service'],
+            barber_id=validated_data['barber_id'],
+            date=validated_data['date'],
+            start_time=validated_data['start_time'],
+            end_time=validated_data['end_time'],
+            status=AppointmentStatus.SCHEDULED,
+            paid_with_plan=validated_data.get('use_plan', False),
+            plan_subscription=validated_data.get('plan_subscription')
+        )
+
+        if validated_data.get('use_plan') and validated_data.get('plan_credit'):
+            credit_entry = validated_data['plan_credit']
+            credit_entry.used += 1
+            credit_entry.save()
+
+        delete_key_redis(phone)
+        refresh = RefreshToken.for_user(user)
+        return {
+            'status': 'ok',
+            'appointment_id': appointment.id,
+            'access': str(refresh.access_token),
+            'refresh': str(refresh)
+        }
 
 
 
