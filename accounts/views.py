@@ -1,6 +1,6 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import status, generics
+from rest_framework import status, permissions
 from core.utils import clean_phone
 from . import serializers, models
 
@@ -34,4 +34,9 @@ class ClientCheckView(APIView):
         })
 
 
-class MeView()
+class MeView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        data = serializers.MeSerializer(request.user).data
+        return Response(data, status=200)
