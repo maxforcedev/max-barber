@@ -72,3 +72,5 @@ class SendLoginCodeSerializer(serializers.Serializer):
         generate_code(phone, f"login_code:{phone}",)
 
         return {"role": user_role, "is_admin": user.is_admin}
+
+

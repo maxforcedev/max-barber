@@ -7,7 +7,7 @@ from rest_framework.permissions import AllowAny
 from accounts.models import User
 from datetime import datetime
 from plans.models import PlanSubscription, PlanSubscriptionCredit, PlanBenefit
-from core.utils import clean_phone
+from appointments.models import Appointment
 
 
 class PlanViewSet(viewsets.ModelViewSet):
@@ -35,7 +35,6 @@ class CheckActivePlanView(APIView):
         if not raw_phone or not raw_service_id or not raw_date:
             return Response({"detail": "Parâmetros obrigatórios: phone, service_id, date (YYYY-MM-DD)."}, status=400)
 
-        # 2) validações básicas
         phone = raw_phone
         try:
             service_id = int(raw_service_id)
@@ -47,13 +46,11 @@ class CheckActivePlanView(APIView):
         except ValueError:
             return Response({"detail": "date deve estar no formato YYYY-MM-DD."}, status=400)
 
-        # 3) usuário
         try:
             user = User.objects.get(phone=phone)
         except User.DoesNotExist:
-            return Response({"has_plan": False})
+            return Response({"has_plan": False, "reason": "no_plan"})
 
-        # 4) assinatura válida NA DATA DO AGENDAMENTO
         subscription = PlanSubscription.objects.filter(
             user=user,
             status="active",
@@ -62,42 +59,76 @@ class CheckActivePlanView(APIView):
         ).first()
 
         if not subscription:
-            return Response({"has_plan": False})
+            return Response({"has_plan": False, "reason": "no_plan"})
 
-        # 5) benefício configurado para o serviço
         benefit = PlanBenefit.objects.filter(
             plan=subscription.plan,
             service_id=service_id
         ).first()
 
         if not benefit:
-            return Response({"has_plan": False})
+            return Response({
+                "has_plan": True,
+                "plan_name": subscription.plan.name,
+                "remaining": 0,
+                "total": 0,
+                "can_use": False,
+                "reason": "no_benefit",
+            })
 
-        # 6) crédito (semeado pela assinatura)
         credit = PlanSubscriptionCredit.objects.filter(
             subscription=subscription,
             service_id=service_id
         ).first()
 
-        # 7) cálculo de usados
         if credit:
-            used = credit.used
-            total = credit.total or benefit.quantity
-            remaining = credit.remaining()
+            used = int(credit.used)
+            total = int(credit.total or benefit.quantity)
+            remaining = int(max(total - used, 0))
         else:
-            # fallback: conta agendamentos com plano
-            used = subscription.appointments.filter(
+            usable_status = ["pending", "scheduled", "completed"]
+            used = Appointment.objects.filter(
+                plan_subscription=subscription,
                 service_id=service_id,
                 paid_with_plan=True,
-                status__in=["pending", "scheduled", "completed"]
+                status__in=usable_status
             ).count()
-            total = benefit.quantity
-            remaining = max(total - used, 0)
+            total = int(benefit.quantity or 0)
+            remaining = int(max(total - used, 0))
+
+        allowed_days = benefit.allowed_days or []
+        if allowed_days:
+            day_map = {0: "mon", 1: "tue", 2: "wed", 3: "thu", 4: "fri", 5: "sat", 6: "sun"}
+            pt_map = {"mon": "Segunda", "tue": "Terça", "wed": "Quarta", "thu": "Quinta", "fri": "Sexta", "sat": "Sábado", "sun": "Domingo"}
+            weekday_code = day_map[appointment_date.weekday()]
+            if weekday_code not in allowed_days:
+                allowed_days_pt = ", ".join(pt_map[d] for d in allowed_days if d in pt_map)
+                return Response({
+                    "has_plan": True,
+                    "plan_name": subscription.plan.name,
+                    "remaining": remaining,
+                    "total": total,
+                    "can_use": False,
+                    "reason": "not_allowed_day",
+                    "allowed_days_pt": allowed_days_pt,
+                    "weekday_pt": pt_map.get(weekday_code, ""),
+                })
+
+        if remaining <= 0:
+            return Response({
+                "has_plan": True,
+                "plan_name": subscription.plan.name,
+                "remaining": remaining,
+                "total": total,
+                "can_use": False,
+                "reason": "no_credits",
+            })
 
         return Response({
             "has_plan": True,
             "plan_name": subscription.plan.name,
             "remaining": remaining,
             "total": total,
-            "can_use": remaining > 0
+            "can_use": True,
+            "reason": "ok",
         })

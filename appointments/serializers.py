@@ -8,7 +8,7 @@ from accounts.models import User
 from services.models import Service
 from .models import Appointment
 from django.utils import timezone
-from plans.models import PlanSubscription, PlanSubscriptionCredit
+from plans.models import PlanSubscription, PlanSubscriptionCredit, PlanBenefit
 
 
 class AppointmentSerializer(serializers.ModelSerializer):
@@ -118,26 +118,57 @@ class AppointmentCreateSerializer(serializers.Serializer):
         attrs['end_time'] = end_time
         return attrs
 
+    def _validate_allowed_days(self, attrs, subscription):
+
+        if not attrs.get("use_plan"):
+            return attrs
+
+        service = attrs.get("service")
+        appointment_date = attrs.get("date")
+
+        if not service or not appointment_date:
+            return attrs
+
+        benefit = PlanBenefit.objects.filter(plan=subscription.plan, service=service).first()
+        if not benefit:
+            raise serializers.ValidationError("Este serviço não faz parte do seu plano.")
+
+        allowed_days = benefit.allowed_days or []
+        if not allowed_days:
+            return attrs
+
+        day_map = {0: "mon", 1: "tue", 2: "wed", 3: "thu", 4: "fri", 5: "sat", 6: "sun"}
+        pt_map = {"mon": "Segunda", "tue": "Terça", "wed": "Quarta", "thu": "Quinta", "fri": "Sexta", "sat": "Sábado", "sun": "Domingo"}
+
+        weekday_code = day_map[appointment_date.weekday()]
+
+        if weekday_code not in allowed_days:
+            dias_permitidos = [pt_map[d] for d in allowed_days]
+            dias_fmt = ", ".join(dias_permitidos)
+            raise serializers.ValidationError(
+                f"Este benefício só pode ser usado em: {dias_fmt}."
+            )
+
+        return attrs
+
     def _validate_plan(self, attrs, request, is_public):
         if attrs.get('use_plan'):
             client = User.objects.filter(phone=attrs.get("phone")).first() if is_public else request.user
-            print(client)
             if not client:
                 raise serializers.ValidationError('Cliente não encontrado para o uso do plano.')
 
             subscription = PlanSubscription.objects.filter(user=client, status='active', start_date__lte=attrs['date'], end_date__gte=attrs['date']).first()
-            print(subscription)
             if not subscription:
-                raise serializers.ValidationError('O cliente não possui plano ativo para esta data..')
+                raise serializers.ValidationError('O cliente não possui plano ativo para esta data.')
 
+            attrs = self._validate_allowed_days(attrs, subscription)
             service_id = attrs["service"].id
             credits = PlanSubscriptionCredit.objects.filter(subscription=subscription, service_id=service_id).first()
-            print(service_id)
-            print(credits)
 
             if not credits or credits.remaining() <= 0:
                 raise serializers.ValidationError("Você não possui créditos disponíveis para este serviço.")
             attrs["plan_credit"] = credits
+            attrs["plan_subscription"] = subscription
         return attrs
 
     def _set_plan_info(self, attrs, user_lookup):
@@ -148,23 +179,42 @@ class AppointmentCreateSerializer(serializers.Serializer):
         if not user_lookup:
             return attrs
 
-        appointment_date = attrs['date'] or timezone.now().date()
+        appointment_date = attrs.get("date") or timezone.localdate()
+        service = attrs.get("service")
+        if not service:
+            return attrs
+
         active_plan = PlanSubscription.objects.filter(
             user=user_lookup,
+            status="active",
             start_date__lte=appointment_date,
-            end_date__gte=appointment_date
+            end_date__gte=appointment_date,
+        ).first()
+        if not active_plan:
+            return attrs
+
+        attrs["plan_name"] = active_plan.plan.name
+
+        benefit = PlanBenefit.objects.filter(
+            plan=active_plan.plan, service=service
+        ).first()
+        if not benefit:
+            return attrs
+
+        allowed_days = benefit.allowed_days or []
+        if allowed_days:
+            day_map = {0: "mon", 1: "tue", 2: "wed", 3: "thu", 4: "fri", 5: "sat", 6: "sun"}
+            weekday_code = day_map[appointment_date.weekday()]
+            if weekday_code not in allowed_days:
+                return attrs
+
+        credit = PlanSubscriptionCredit.objects.filter(
+            subscription=active_plan, service=service
         ).first()
 
-        if active_plan:
-            credit = PlanSubscriptionCredit.objects.filter(
-                subscription=active_plan,
-                service_id=attrs["service"].id
-            ).first()
-
-            if credit and credit.remaining() > 0:
-                attrs["can_use_plan"] = True
-                attrs["remaining_credits"] = credit.remaining()
-                attrs["plan_name"] = active_plan.plan.name
+        if credit and credit.remaining() > 0:
+            attrs["can_use_plan"] = True
+            attrs["remaining_credits"] = credit.remaining()
 
         return attrs
 
@@ -174,9 +224,9 @@ class AppointmentCreateSerializer(serializers.Serializer):
 
         attrs = self._validate_phone(attrs, is_public)
         attrs = self._check_existing_appointment(attrs, request, attrs.get("phone"), is_public)
-        attrs = self._validate_availability(attrs)
 
         attrs = self._validate_service(attrs)
+        attrs = self._validate_availability(attrs)
         attrs = self._validate_slot(attrs)
         attrs = self._validate_plan(attrs, request, is_public)
 
@@ -320,6 +370,39 @@ class AppointmentConfirmSerializer(serializers.Serializer):
         attrs['end_time'] = end_time
         return attrs
 
+    def _validate_allowed_days(self, attrs, subscription):
+
+        if not attrs.get("use_plan"):
+            return attrs
+
+        service = attrs.get("service")
+        appointment_date = attrs.get("date")
+
+        if not service or not appointment_date:
+            return attrs
+
+        benefit = PlanBenefit.objects.filter(plan=subscription.plan, service=service).first()
+        if not benefit:
+            raise serializers.ValidationError("Este serviço não faz parte do seu plano.")
+
+        allowed_days = benefit.allowed_days or []
+        if not allowed_days:
+            return attrs
+
+        day_map = {0: "mon", 1: "tue", 2: "wed", 3: "thu", 4: "fri", 5: "sat", 6: "sun"}
+        pt_map = {"mon": "Segunda", "tue": "Terça", "wed": "Quarta", "thu": "Quinta", "fri": "Sexta", "sat": "Sábado", "sun": "Domingo"}
+
+        weekday_code = day_map[appointment_date.weekday()]
+
+        if weekday_code not in allowed_days:
+            dias_permitidos = [pt_map[d] for d in allowed_days]
+            dias_fmt = ", ".join(dias_permitidos)
+            raise serializers.ValidationError(
+                f"Este benefício só pode ser usado em: {dias_fmt}."
+            )
+
+        return attrs
+
     def _validate_plan(self, attrs, request, is_public):
         if attrs.get('use_plan'):
             client = User.objects.filter(phone=attrs.get("phone")).first() if is_public else request.user
@@ -331,6 +414,8 @@ class AppointmentConfirmSerializer(serializers.Serializer):
 
             if not subscription:
                 raise serializers.ValidationError('O cliente não possui plano ativo.')
+
+            attrs = self._validate_allowed_days(attrs, subscription)
 
             service_id = attrs["service"].id
             credits = PlanSubscriptionCredit.objects.filter(subscription=subscription, service_id=service_id).first()
@@ -348,9 +433,9 @@ class AppointmentConfirmSerializer(serializers.Serializer):
         attrs = self._validate_phone(attrs)
         attrs = self._check_existing_appointment(attrs, request, attrs.get("phone"), is_public)
         attrs = self._validate_code(attrs)
-        attrs = self._validate_availability(attrs)
-
         attrs = self._validate_service(attrs)
+
+        attrs = self._validate_availability(attrs)
         attrs = self._validate_slot(attrs)
         attrs = self._validate_plan(attrs, request, is_public)
 
@@ -387,7 +472,6 @@ class AppointmentConfirmSerializer(serializers.Serializer):
             'access': str(refresh.access_token),
             'refresh': str(refresh)
         }
-
 
 
 class AppointmentCancelSerializer(serializers.Serializer):
