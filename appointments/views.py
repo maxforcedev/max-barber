@@ -15,18 +15,22 @@ class AppointmentCreateView(APIView):
 
     def post(self, request):
         serializer = AppointmentCreateSerializer(data=request.data, context={"request": request})
+        print(request.data)
         if serializer.is_valid():
             data = serializer.save()
             return Response(data, status=status.HTTP_201_CREATED)
+        print(serializer.errors)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class AppointmentConfirmView(APIView):
     def post(self, request):
-        serializer = AppointmentConfirmSerializer(data=request.data)
+        serializer = AppointmentConfirmSerializer(data=request.data, context={"request": request})
+        print(request.data)
         if serializer.is_valid():
             data = serializer.save()
             return Response(data, status=status.HTTP_200_OK)
+        print(serializer.errors)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 

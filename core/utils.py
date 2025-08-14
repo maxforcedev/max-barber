@@ -53,8 +53,8 @@ def validate_code(code, key, phone, r=None):
 
     r_code = r.get(key)
     if r_code is None or r_code.decode() != code:
-        r.incr(attempts_key)
-        r.expire(attempts_key, 300)
+        # r.incr(attempts_key)
+        # r.expire(attempts_key, 300)
         raise serializers.ValidationError("O código informado está incorreto ou expirado.")
 
     r.delete(attempts_key)

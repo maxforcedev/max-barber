@@ -362,7 +362,7 @@ class AppointmentConfirmSerializer(serializers.Serializer):
 
     def create(self, validated_data):
         phone = validated_data['phone']
-        name = validated_data['name'] or 'Usuario'
+        name = validated_data.get('name') or 'Usuario'
 
         user, _ = User.objects.get_or_create(phone=phone, defaults={'name': name, 'role': UserRole.CLIENT})
 
