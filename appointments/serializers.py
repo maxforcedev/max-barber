@@ -121,16 +121,21 @@ class AppointmentCreateSerializer(serializers.Serializer):
     def _validate_plan(self, attrs, request, is_public):
         if attrs.get('use_plan'):
             client = User.objects.filter(phone=attrs.get("phone")).first() if is_public else request.user
+            print(client)
             if not client:
                 raise serializers.ValidationError('Cliente não encontrado para o uso do plano.')
 
-            subscription = PlanSubscription.objects.filter(user=client, status='active', end_date__gte=timezone.now().date()).first()
+            subscription = PlanSubscription.objects.filter(user=client, status='active', start_date__lte=attrs['date'], end_date__gte=attrs['date']).first()
+            print(subscription)
             if not subscription:
-                raise serializers.ValidationError('O cliente não possui plano ativo.')
+                raise serializers.ValidationError('O cliente não possui plano ativo para esta data..')
 
             service_id = attrs["service"].id
-            credits = PlanSubscriptionCredit.objects.filter(subscription=subscription, service_id=service_id, used=False).first()
-            if not credits:
+            credits = PlanSubscriptionCredit.objects.filter(subscription=subscription, service_id=service_id).first()
+            print(service_id)
+            print(credits)
+
+            if not credits or credits.remaining() <= 0:
                 raise serializers.ValidationError("Você não possui créditos disponíveis para este serviço.")
             attrs["plan_credit"] = credits
         return attrs
@@ -143,10 +148,11 @@ class AppointmentCreateSerializer(serializers.Serializer):
         if not user_lookup:
             return attrs
 
+        appointment_date = attrs['date'] or timezone.now().date()
         active_plan = PlanSubscription.objects.filter(
             user=user_lookup,
-            status="active",
-            end_date__gte=timezone.now().date()
+            start_date__lte=appointment_date,
+            end_date__gte=appointment_date
         ).first()
 
         if active_plan:
@@ -321,25 +327,18 @@ class AppointmentConfirmSerializer(serializers.Serializer):
                 raise serializers.ValidationError('Cliente não encontrado para o uso do plano.')
             attrs['name'] = client.name or 'Usuario'
 
-            subscription = PlanSubscription.objects.filter(user=client, status='active', end_date__gte=timezone.now().date()).first()
-            attrs['subscription'] = subscription
+            subscription = PlanSubscription.objects.filter(user=client, status='active', start_date__lte=attrs['date'], end_date__gte=attrs['date']).first()
 
             if not subscription:
                 raise serializers.ValidationError('O cliente não possui plano ativo.')
-        return attrs
 
-    def _validate_credits_plan(self, attrs):
-        service_id = attrs["service"].id
-        subscription = attrs['subscription']
-        credits = PlanSubscriptionCredit.objects.filter(subscription=subscription, service_id=service_id, used=False).first()
-        if not credits or credits.remaining() <= 0:
-            raise serializers.ValidationError("Você não possui créditos disponíveis para este serviço.")
+            service_id = attrs["service"].id
+            credits = PlanSubscriptionCredit.objects.filter(subscription=subscription, service_id=service_id).first()
+            if not credits or credits.remaining() <= 0:
+                raise serializers.ValidationError("Você não possui créditos disponíveis para este serviço.")
 
-        if not attrs.get('plan_subscription') or not attrs['plan_credit']:
-            attrs['use_plan'] = False
-
-        attrs["plan_credit"] = credits
-        attrs['plan_subscription'] = subscription
+            attrs["plan_credit"] = credits
+            attrs["plan_subscription"] = subscription
         return attrs
 
     def validate(self, attrs):
@@ -354,9 +353,6 @@ class AppointmentConfirmSerializer(serializers.Serializer):
         attrs = self._validate_service(attrs)
         attrs = self._validate_slot(attrs)
         attrs = self._validate_plan(attrs, request, is_public)
-
-        if attrs.get("use_plan"):
-            attrs = self._validate_credits_plan(attrs)
 
         return attrs
 

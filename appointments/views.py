@@ -47,6 +47,7 @@ class AppointmentCancelView(APIView):
             return Response({"status": "ok", "message": "Agendamento cancelado com sucesso.", "data": data}, status=status.HTTP_200_OK)
         return Response({"status": "error", "message": "Não foi possível cancelar o agendamento.", "data": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
+
 # ALTERAR FUTURAMENTE
 class AppointmentsListView(generics.ListAPIView):
     authentication_classes = [JWTAuthentication]
