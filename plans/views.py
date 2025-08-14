@@ -57,9 +57,10 @@ class CheckActivePlanView(APIView):
             start_date__lte=appointment_date,
             end_date__gte=appointment_date
         ).first()
+        ever_had_plan = PlanSubscription.objects.filter(user=user).exists()
 
         if not subscription:
-            return Response({"has_plan": False, "reason": "no_plan"})
+            return Response({"has_plan": False, "reason": "no_plan", "ever_had_plan": ever_had_plan})
 
         benefit = PlanBenefit.objects.filter(
             plan=subscription.plan,
@@ -74,6 +75,7 @@ class CheckActivePlanView(APIView):
                 "total": 0,
                 "can_use": False,
                 "reason": "no_benefit",
+                "ever_had_plan": True
             })
 
         credit = PlanSubscriptionCredit.objects.filter(
@@ -112,6 +114,7 @@ class CheckActivePlanView(APIView):
                     "reason": "not_allowed_day",
                     "allowed_days_pt": allowed_days_pt,
                     "weekday_pt": pt_map.get(weekday_code, ""),
+                    "ever_had_plan": True
                 })
 
         if remaining <= 0:
@@ -122,6 +125,7 @@ class CheckActivePlanView(APIView):
                 "total": total,
                 "can_use": False,
                 "reason": "no_credits",
+                "ever_had_plan": True
             })
 
         return Response({
@@ -131,4 +135,5 @@ class CheckActivePlanView(APIView):
             "total": total,
             "can_use": True,
             "reason": "ok",
+            "ever_had_plan": True
         })
