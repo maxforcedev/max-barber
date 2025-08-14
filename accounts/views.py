@@ -1,6 +1,6 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import status
+from rest_framework import status, generics
 from core.utils import clean_phone
 from . import serializers, models
 
@@ -32,3 +32,6 @@ class ClientCheckView(APIView):
             "name": user.name if user else None,
             "phone": phone
         })
+
+
+class MeView()

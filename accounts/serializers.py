@@ -74,3 +74,7 @@ class SendLoginCodeSerializer(serializers.Serializer):
         return {"role": user_role, "is_admin": user.is_admin}
 
 
+class MeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ("id", "name", "phone", "email")
